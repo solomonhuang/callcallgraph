@@ -283,7 +283,7 @@ class CCGWindow(xdot.DotWindow):
 
     def update_database(self):
         if not os.path.isfile(self.working_dir + "/cscope.out"):
-            dialog = gtk.MessageDialog(parent=self, type=gtk.MESSAGE_QUESTION, buttons=gtk.BUTTONS_YES_NO)
+            dialog = Gtk.MessageDialog(parent=self, type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO)
             dialog.set_default_response(Gtk.ResponseType.YES)
             dialog.set_markup("Create cscope database for %s now ?" % self.working_dir )
             ret = dialog.run()
