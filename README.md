@@ -4,8 +4,8 @@ A caller/callee graph visualzer based on [cscope][1], [graphviz][2], [xdot][3].
 Previous work is from [chihchun][4]
 
 
-[1] http://cscope.sourceforge.net/
-[2] http://www.graphviz.org/
-[3] http://code.google.com/p/jrfonseca/wiki/XDot
-[4] https://github.com/chihchun/callgraphviz
+[1]: http://cscope.sourceforge.net/
+[2]: http://www.graphviz.org/
+[3]: http://code.google.com/p/jrfonseca/wiki/XDot
+[4]: https://github.com/chihchun/callgraphviz
 
