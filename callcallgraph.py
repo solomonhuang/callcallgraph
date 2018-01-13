@@ -306,7 +306,7 @@ class CCGWindow(xdot.DotWindow):
             for n in self.nodes:
                 ccg_graph.add_node(n, label="%s\n%s:%d\n%s" % (n.dir, n.file, n.line, n.func))
         else:
-        for n in self.nodes:
+            for n in self.nodes:
                 ccg_graph.add_node(n, label="%s:%d\n%s" % (n.file, n.line, n.func))
         ccg_graph.add_edges_from(list(edges))
         ccg_dot = str(nx_pydot.to_pydot(ccg_graph))
