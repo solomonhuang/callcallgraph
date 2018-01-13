@@ -17,21 +17,21 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import os
-import subprocess
-import json
-import re
 import hashlib
+import json
+import os
+import re
+import subprocess
 from pathlib import PurePath
 
-
 import gi
-gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
-
-import xdot
 import networkx as nx
+import xdot
+from gi.repository import Gtk
 from networkx import nx_pydot
+
+gi.require_version('Gtk', '3.0')
+
 
 __author__ = 'Solomon Huang <kaichanh@gmail.com>'
 __version__ = '0.0.1'
