@@ -282,7 +282,7 @@ class CCGWindow(xdot.DotWindow):
                         called_node = CCGNode(func, file, line)
                         if called_node not in self.nodes:
                             self.nodes.add(called_node)
-                        e = (called_node, node)
+                        e = (node, called_node)
                         edges.add(e)
 
             allFuncs, funsCalling = self.functionsCalling(node.func)
@@ -297,7 +297,7 @@ class CCGWindow(xdot.DotWindow):
                         if calling_node not in self.nodes:
                             self.nodes.add(calling_node)
 
-                        e = (node, calling_node)
+                        e = (calling_node, node)
                         edges.add(e)
 
         self.ccg_graph = nx.DiGraph()
