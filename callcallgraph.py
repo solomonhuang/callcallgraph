@@ -159,8 +159,8 @@ class CCGWindow(xdot.DotWindow):
         chooser.set_default_response(Gtk.ResponseType.OK)
         if chooser.run() == Gtk.ResponseType.OK:
             filename = chooser.get_filename()
-            print(filename)
             self.working_dir = filename
+            self.update_title(os.path.basename(self.working_dir))
             self.interest = set()
             self.filename = None
             p = PurePath(self.working_dir, ".callcallgraph.json")
@@ -327,6 +327,7 @@ class CCGWindow(xdot.DotWindow):
         print("\n\ndotcode:\n" + dotcode + "\n\n")
         self.dotcode = dotcode
         super(CCGWindow, self).set_dotcode(dotcode, filename)
+        self.update_title(os.path.basename(self.working_dir))
 
 
 def main():
