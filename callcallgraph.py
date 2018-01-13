@@ -51,7 +51,8 @@ class CCGNode(object):
         self.digest = h.digest()
         self.paths = []
         self.file = os.path.basename(self.full_file_path)
-        dir = os.path.dirname(self.full_file_path)
+        self.dir = os.path.dirname(self.full_file_path)
+        dir = self.dir
         while len(dir) > 0:
             self.paths.insert(0, os.path.basename(dir))
             dir = os.path.dirname(dir)
@@ -77,9 +78,9 @@ class CCGWindow(xdot.DotWindow):
         self.config = dict()
         self.config['ignore_symbols'] = []
         self.config['ignore_header'] = True
+        self.config['show_folder'] = True
         self.ignore_symbols = set()
         self.dotcode = None
-        self.ccg_graph = None
         self.nodes = set()
 
         xdot.DotWindow.__init__(self, width=600, height=512)
@@ -300,11 +301,15 @@ class CCGWindow(xdot.DotWindow):
                         e = (calling_node, node)
                         edges.add(e)
 
-        self.ccg_graph = nx.DiGraph()
+        ccg_graph = nx.DiGraph()
+        if self.config['show_folder']:
+            for n in self.nodes:
+                ccg_graph.add_node(n, label="%s\n%s:%d\n%s" % (n.dir, n.file, n.line, n.func))
+        else:
         for n in self.nodes:
-            self.ccg_graph.add_node(n, label="%s:%d\n%s" % (n.file, n.line, n.func))
-        self.ccg_graph.add_edges_from(list(edges))
-        ccg_dot = str(nx_pydot.to_pydot(self.ccg_graph))
+                ccg_graph.add_node(n, label="%s:%d\n%s" % (n.file, n.line, n.func))
+        ccg_graph.add_edges_from(list(edges))
+        ccg_dot = str(nx_pydot.to_pydot(ccg_graph))
         self.set_dotcode(ccg_dot)
 
     def update_database(self):
