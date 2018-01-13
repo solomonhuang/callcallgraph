@@ -33,6 +33,9 @@ import xdot
 import networkx as nx
 from networkx import nx_pydot
 
+__author__ = 'Solomon Huang <kaichanh@gmail.com>'
+__version__ = '0.0.1'
+
 
 class CCGNode(object):
     ''' Represent the function with its file name and location '''
