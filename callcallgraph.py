@@ -198,19 +198,11 @@ class CCGWindow(xdot.DotWindow):
             self.on_new_project(None)
         if self.is_symbol_ignored(symbol):
             return
-        self.addSymbol(symbol)
+        self.add_symbol(symbol)
 
-    def add_symbol_node(self, symbol):
-        defs, calls = self.functionDefincation(symbol)
-        for file in calls.keys():
-            for (func, line) in calls[file]:
-                node = CCGNode(func, file, line)
-                if node not in self.nodes:
-                    self.nodes.add(node)
-
-    def addSymbol(self, symbol):
+    def add_symbol(self, symbol):
         # TODO: sould Saving the filename and line number.
-        print("addSymbol: %s" % symbol)
+        print("add_symbol: %s" % symbol)
         if(symbol == '//'):
             return
 
