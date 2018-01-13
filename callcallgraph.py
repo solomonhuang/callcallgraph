@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright 2010 Solomon Huang <kaichanh@gmail.com>
 # Copyright 2010 Rex Tsai <chihchun@kalug.linux.org.tw>
 # Copyright 2008 Jose Fonseca
 #
@@ -16,11 +17,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-import sys
 import os
 import subprocess
 import json
 import re
+import hashlib
 from pathlib import PurePath
 
 
@@ -29,60 +30,54 @@ gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk
 
 import xdot
-import pydot
+import networkx as nx
+from networkx import nx_pydot
 
 
-class CallGraph(object):
-    """CallGraph
-    """
-    def __init__(self, database):
-        self.database = database
-        self.graph = pydot.Graph()
+class CCGNode(object):
+    ''' Represent the function with its file name and location '''
+    def __init__(self, function, file, line):
+        self.func = function
+        self.full_file_path = file
+        self.line = int(line)
+        h = hashlib.sha512()
+        h.update(self.full_file_path.encode("utf-8"))
+        h.update(str(self.line).encode("utf-8"))
+        h.update(self.func.encode("utf-8"))
+        self.hexdigest = h.hexdigest()
+        self.digest = h.digest()
+        self.paths = []
+        self.file = os.path.basename(self.full_file_path)
+        dir = os.path.dirname(self.full_file_path)
+        while len(dir) > 0:
+            self.paths.insert(0, os.path.basename(dir))
+            dir = os.path.dirname(dir)
 
-    def cscope_search(self, mode, symbol):
-        cmd = "cscope -d -l -L -%d %s" % (mode, symbol) 
-        process = subprocess.Popen(cmd, stdout = subprocess.PIPE, shell = True, cwd = self.working_dir) 
-        csoutput = process.stdout.read() 
-        print("mode %s", str(mode))
-        print(csoutput)
-        del process
-        cslines = [arr.strip().split(' ') for arr in csoutput.split('\n') if len(arr.split(' '))>1] 
-        print(cslines)
-        allFuns = set(map(lambda x:x[1], cslines))
-        print(allFuns)
+    def __str__(self):
+        return self.hexdigest[0:32]
 
-        funsCalled = {}
-        for fl in cslines:
-            if fl[0] in funsCalled:
-                funsCalled[fl[0]] |= set([fl[1]])
-            else:
-                funsCalled[fl[0]] = set([fl[1]])
+    def __eq__(self, other):
+        return self.digest == other.digest
 
-        return (allFuns, funsCalled)
-
-    def find_functions_definition(self, symbol):
-        self.cscope_search(1, symbol)
-
-    def find_functions_calling(self, symbol):
-        self.cscope_search(2, symbol)
-
-    def find_functions_called(self, symbol):
-        self.cscope_search(3, symbol)
-
+    def __hash__(self):
+        return int.from_bytes(self.digest[0:4], byteorder='big')
 
 
 class CCGWindow(xdot.DotWindow):
-    """CallCallGraph Window
-    """
+    ''' CallCallGraph Window '''
+
     def __init__(self):
         self.base_title = "Call Call Graph"
         self.working_dir = None
-        self.interest = {}
+        self.interest = set()
         self.filename = None
         self.config = dict()
         self.config['ignore_symbols'] = []
-        self.ignore_symbols = {}
+        self.config['ignore_header'] = True
+        self.ignore_symbols = set()
         self.dotcode = None
+        self.ccg_graph = None
+        self.nodes = set()
 
         xdot.DotWindow.__init__(self, width=600, height=512)
         toolbar = self.uimanager.get_widget('/ToolBar')
@@ -125,8 +120,8 @@ class CCGWindow(xdot.DotWindow):
         hbox.show()
 
     def on_reload(self, action):
-        print("reload")
-        self.interest = {}
+        self.interest = set()
+        self.nodes = set()
         self.set_dotcode("digraph G {}")
 
     def on_save(self, action):
@@ -162,17 +157,25 @@ class CCGWindow(xdot.DotWindow):
             filename = chooser.get_filename()
             print(filename)
             self.working_dir = filename
-            self.interest = {}
+            self.interest = set()
             self.filename = None
             p = PurePath(self.working_dir, ".callcallgraph.json")
             try:
                 with open(str(p), "r") as conf:
-                    self.config = json.loads(conf.read())
+                    config = json.loads(conf.read())
+                    for c in config.keys():
+                        if c not in self.config:
+                            self.config[c] = config[c]
+                        else:
+                            self.config[c] = config[c]
+                # write back config
+                with open(str(p), "w") as conf:
+                    conf.write(json.dumps(self.config, indent=4))
             except FileNotFoundError:
                 with open(str(p), "w") as conf:
                     conf.write(json.dumps(self.config, indent=4))
             self.ignore_symbols = set(map(lambda x: re.compile(x), self.config['ignore_symbols']))
-            
+
             self.update_database()
             self.update_graph()
 
@@ -180,7 +183,7 @@ class CCGWindow(xdot.DotWindow):
 
     def is_symbol_ignored(self, symbol):
         for p in self.ignore_symbols:
-            if p.match(symbol) != None:
+            if p.match(symbol) is not None:
                 return True
         return False
 
@@ -194,42 +197,63 @@ class CCGWindow(xdot.DotWindow):
             return
         self.addSymbol(symbol)
 
-    def addSymbol(self, symbol, lazy=0):
+    def add_symbol_node(self, symbol):
+        defs, calls = self.functionDefincation(symbol)
+        for file in calls.keys():
+            for (func, line) in calls[file]:
+                node = CCGNode(func, file, line)
+                if node not in self.nodes:
+                    self.nodes.add(node)
+
+    def addSymbol(self, symbol):
         # TODO: sould Saving the filename and line number.
-        print(symbol)
+        print("addSymbol: %s" % symbol)
         if(symbol == '//'):
             return
 
-        if(lazy == 0):
-            defs, calls = self.functionDefincation(symbol)
-            if len(defs) >= 1:
-                self.interest[symbol] = 1
-            self.update_graph()
-        else:
-            self.interest[symbol] = 1
+        defs, calls = self.functionDefincation(symbol)
+        for file in calls.keys():
+            for (func, line) in calls[file]:
+                node = CCGNode(func, file, line)
+                if node not in self.nodes:
+                    self.nodes.add(node)
+                if node not in self.interest:
+                    self.interest.add(node)
+        self.update_graph()
 
     def cscope(self, mode, func):
         # TODO: check the cscope database is exist.
         cmd = "/usr/bin/cscope -d -l -L -%d %s" % (mode, func)
-        print(cmd)
+        # print(cmd)
         with subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True,
                               cwd=self.working_dir) as proc:
             csoutput = str(proc.stdout.read(), encoding="utf-8")
-        print(csoutput)
-        cslines = [arr.strip().split(' ') for arr in csoutput.split('\n') if len(arr.split(' '))>1] 
-        print(cslines)
-        allFuns = set(map(lambda x:x[1], cslines))
-        print(allFuns)
+        # print("\ncsoutput")
+        # print(csoutput)
+        cslines = [arr.strip().split(' ') for arr in csoutput.split('\n') if len(arr.split(' ')) > 1]
+        # print("\ncslines")
+        # print(cslines)
+        allFuns = set(map(lambda x: x[1], cslines))
+        # print("\nallFuncs")
+        # print(allFuns)
 
-        funsCalled = {}
-        for fl in cslines:
-            if fl[0] in funsCalled:
-                funsCalled[fl[0]] |= set([fl[1]])
+        funs_files = {}
+        for l in cslines:
+            file = l[0]
+            function = l[1]
+            line = l[2]
+            # print("file %s %s\n" % (file, file[-2:]))
+            if self.config['ignore_header'] and file[-2:] == ".h":
+                continue
+            if file in funs_files:
+                funs_files[file].add(tuple([function, line]))
             else:
-                funsCalled[fl[0]] = set([fl[1]])
+                funs_files[file] = set()
+                funs_files[file].add(tuple([function, line]))
 
-        print(funsCalled)
-        return (allFuns, funsCalled)
+        # print("\funs_files")
+        # print(funs_files)
+        return (allFuns, funs_files)
 
     def functionDefincation(self, func):
         return self.cscope(1, func)
@@ -244,71 +268,71 @@ class CCGWindow(xdot.DotWindow):
 
     def update_graph(self):
         """ update dot code based on the interested keys """
-        funcs = set(self.interest.keys())
-        #print("len of funcs %d" % (len(funcs)))
-        if len(funcs) <= 0:
-            # self.widget.graph = xdot.Graph()
+        if len(self.interest) <= 0:
             return
 
-        nodes = dict()
-        for func in funcs:
-            if self.is_symbol_ignored(func):
+        edges = set()
+        for node in self.interest:
+            if self.is_symbol_ignored(node.func):
                 continue
-            if func not in nodes:
-                nodes[func] = list()
-            
-            allFuncs, funsCalled = self.functionsCalled (func)
+
+            allFuncs, funsCalled = self.functionsCalled(node.func)
             for m in allFuncs:
                 if self.is_symbol_ignored(m):
                     continue
-                if m not in nodes[func]:
-                    nodes[func].append(m)
 
-            allFuncs, funsCalling = self.functionsCalling (func)
+                defs, calls = self.functionDefincation(m)
+                for file in calls.keys():
+                    for (func, line) in calls[file]:
+                        called_node = CCGNode(func, file, line)
+                        if called_node not in self.nodes:
+                            self.nodes.add(called_node)
+                        e = (called_node, node)
+                        edges.add(e)
+
+            allFuncs, funsCalling = self.functionsCalling(node.func)
             for m in allFuncs:
                 if self.is_symbol_ignored(m):
                     continue
-                if m not in nodes:
-                    nodes[m] = list()
-                nodes[m].append(func)
 
-        dotcode = "digraph G {\n"
-        for node in nodes.keys():
-            dotcode += ' '*2 + '"%s";\n' % node
-            for nbr in nodes[node]:
-                dotcode += ' '*4 + '"%s" -> "%s";\n' % (node, nbr)
-        dotcode += "}\n"
+                defs, calls = self.functionDefincation(m)
+                for file in calls.keys():
+                    for (func, line) in calls[file]:
+                        calling_node = CCGNode(func, file, line)
+                        if calling_node not in self.nodes:
+                            self.nodes.add(calling_node)
 
-        self.set_dotcode(dotcode)
+                        e = (node, calling_node)
+                        edges.add(e)
+
+        self.ccg_graph = nx.DiGraph()
+        for n in self.nodes:
+            self.ccg_graph.add_node(n, label="%s:%d\n%s" % (n.file, n.line, n.func))
+        self.ccg_graph.add_edges_from(list(edges))
+        ccg_dot = str(nx_pydot.to_pydot(self.ccg_graph))
+        self.set_dotcode(ccg_dot)
 
     def update_database(self):
         if not os.path.isfile(self.working_dir + "/cscope.out"):
             dialog = Gtk.MessageDialog(parent=self, type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.YES_NO)
             dialog.set_default_response(Gtk.ResponseType.YES)
-            dialog.set_markup("Create cscope database for %s now ?" % self.working_dir )
+            dialog.set_markup("Create cscope database for %s now ?" % self.working_dir)
             ret = dialog.run()
             dialog.destroy()
             if ret == Gtk.ResponseType.YES:
                 cmd = "cscope -bkRu"
-                process = subprocess.call(cmd, shell=True, cwd=self.working_dir) 
-                del process
-        pass
+                subprocess.call(cmd, shell=True, cwd=self.working_dir)
 
     def set_dotcode(self, dotcode, filename=None):
         print("\n\ndotcode:\n" + dotcode + "\n\n")
         self.dotcode = dotcode
         super(CCGWindow, self).set_dotcode(dotcode, filename)
-    #    if self.set_dotcode(dotcode, filename):
-    #        #self.set_title(os.path.basename(filename) + ' - Code Visualizer')
-    #        self.widget.zoom_to_fit()
-
 
 
 def main():
     window = CCGWindow()
     window.connect('delete-event', Gtk.main_quit)
     Gtk.main()
-
 
 if __name__ == '__main__':
     main()
