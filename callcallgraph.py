@@ -294,6 +294,8 @@ class CCGWindow(xdot.DotWindow):
                 defs, calls = self.functionDefincation(m)
                 for file in calls.keys():
                     for (func, line) in calls[file]:
+                        if file not in funsCalling:
+                            continue
                         calling_node = CCGNode(func, file, line)
                         if calling_node not in self.nodes:
                             self.nodes.add(calling_node)
