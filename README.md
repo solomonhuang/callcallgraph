@@ -9,10 +9,6 @@ Previous work is from [chihchun][4]
 
   ![Linux 4.14.12 add_del_if()](screenshots/linux-4.14.12-add_del_if.png)
 
-* Linux 4.14.12 nr_processes()
-
-  ![Linux 4.14.12 nr_processes()](screenshots/linux-4.14.12-nr_processes.png)
-
 
 [1]: http://cscope.sourceforge.net/
 [2]: http://www.graphviz.org/
